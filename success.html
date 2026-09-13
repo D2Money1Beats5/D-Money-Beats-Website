@@ -1,1 +1,55 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Order received | D-Money Beats</title><link rel="stylesheet" href="styles.css"><style>.success{width:min(760px,calc(100% - 36px));margin:0 auto;padding:120px 0;text-align:center}.success h1{font-size:clamp(2.8rem,8vw,5rem)}.success p{color:#c8bfd2}</style></head><body><main class="success"><p class="eyebrow">D-Money Beats</p><h1>Payment received.</h1><p>Your Stripe receipt is the first confirmation. The protected file/license delivery step is completed by the fulfillment flow tied to this order.</p><p id="orderStatus">Verifying order…</p><a class="button primary" href="index.html#beats">Back to beats</a></main><script>const id=new URLSearchParams(location.search).get('session_id');document.getElementById('orderStatus').textContent=id?'Keep this page open while delivery is prepared. Order reference: '+id.slice(0,18)+'…':'Your order reference is available in your Stripe receipt.';</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order verified | D-Money Beats</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+.success{width:min(820px,calc(100% - 36px));margin:0 auto;padding:100px 0}.success h1{font-size:clamp(2.8rem,8vw,5rem);margin-bottom:18px}.success>p{color:#c8bfd2}.order-card{margin:28px 0;padding:24px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#12111c,#0b0c13)}.status{font-weight:800}.status.ok{color:#bfffc8}.status.warn{color:#ffd49a}.status.bad{color:#ff9eaa}.summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}.summary div{padding:12px;border:1px solid rgba(224,203,255,.12);border-radius:10px;background:#090a11}.summary small{display:block;color:#988da8}.summary strong{display:block;overflow-wrap:anywhere}.actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.delivery-group{margin:20px 0;padding-top:18px;border-top:1px solid var(--line)}.delivery-group h3{margin-bottom:8px}.download-list{display:grid;gap:8px}.download-link{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid rgba(197,119,255,.26);border-radius:10px;text-decoration:none;background:rgba(13,11,22,.72)}.download-link:hover{border-color:rgba(197,119,255,.56)}.confirm{display:none;margin-top:20px;padding:14px;border:1px solid rgba(133,255,163,.28);border-radius:10px;color:#caffd5}.confirm.show{display:block}.muted{color:#a99fb6;font-size:.88rem}@media(max-width:640px){.summary{grid-template-columns:1fr}.actions .button{width:100%}}
+</style>
+</head>
+<body>
+<main class="success">
+  <p class="eyebrow">D-Money Beats</p>
+  <h1 id="headline">Verifying payment…</h1>
+  <p id="intro">Your downloads stay locked until Stripe confirms this order as successfully paid.</p>
+  <section class="order-card" aria-live="polite">
+    <p id="status" class="status">Checking Stripe…</p>
+    <div id="details"></div>
+  </section>
+  <a class="button ghost" href="index.html#beats">Back to beats</a>
+</main>
+<script>
+const id=new URLSearchParams(location.search).get('session_id');
+const statusEl=document.getElementById('status');
+const details=document.getElementById('details');
+const headline=document.getElementById('headline');
+const intro=document.getElementById('intro');
+let downloadCount=0;
+function money(n,c){try{return new Intl.NumberFormat(undefined,{style:'currency',currency:(c||'usd').toUpperCase()}).format((n||0)/100)}catch{return `${(n||0)/100} ${(c||'usd').toUpperCase()}`}}
+function safe(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function trackDownload(){downloadCount++;const el=document.getElementById('downloadConfirm');if(el){el.classList.add('show');el.textContent=`Download confirmed on this page (${downloadCount} item${downloadCount===1?'':'s'} opened). Keep your Stripe receipt and agreement with your files.`}}
+async function verify(){
+  if(!id){headline.textContent='Order reference missing.';statusEl.className='status bad';statusEl.textContent='This page needs a valid Stripe Checkout order reference.';return}
+  try{
+    const r=await fetch(`/api/verify-session?session_id=${encodeURIComponent(id)}`,{headers:{accept:'application/json'}});
+    const d=await r.json();
+    if(!r.ok||!d.verified)throw new Error(d.error||'Payment could not be verified.');
+    headline.textContent='Payment verified.';intro.textContent='Your Stripe payment is confirmed. The items below are matched to this paid order.';statusEl.className='status ok';statusEl.textContent='Verified paid order';
+    const beats=(d.beats||[]).join(', ')||'Service order';
+    let html=`<div class="summary"><div><small>Order</small><strong>${safe(d.session_id)}</strong></div><div><small>Product</small><strong>${safe(d.product_label)}</strong></div><div><small>Beat(s)</small><strong>${safe(beats)}</strong></div><div><small>Paid</small><strong>${safe(money(d.amount_total,d.currency))}</strong></div><div><small>Email</small><strong>${safe(d.customer_email||'Shown on Stripe receipt')}</strong></div><div><small>Agreement version</small><strong>${safe(d.license_version||'Current')}</strong></div></div>`;
+    html+=`<div class="actions">${d.receipt_url?`<a class="button ghost" href="${safe(d.receipt_url)}" target="_blank" rel="noopener">Open Stripe receipt</a>`:''}<a class="button primary" href="${safe(d.agreement_url)}" data-download>Download ${d.service?'service order record':'matching license agreement'}</a></div>`;
+    if(d.service){html+=`<div class="delivery-group"><h3>Next step</h3><p>${safe(d.service_next_step)}</p><a class="button ghost" href="index.html#contact">Submit project / contact D-Money Beats</a></div>`}
+    else if(d.delivery_ready){
+      for(const group of d.delivery||[]){html+=`<div class="delivery-group"><h3>${safe(group.beat)}</h3><div class="download-list">${(group.files||[]).map(f=>`<a class="download-link" href="${safe(f.url)}" data-download><span>${safe(f.label)}</span><strong>Download</strong></a>`).join('')}</div></div>`}
+    }else{html+=`<div class="delivery-group"><p class="status warn">Payment is verified, but master-file delivery is not connected for this item yet.</p><p class="muted">${safe(d.delivery_message||'Contact D-Money Beats with the order reference shown above.')}</p><a class="button ghost" href="index.html#contact">Order support</a></div>`}
+    html+=`<div id="downloadConfirm" class="confirm"></div>`;
+    details.innerHTML=html;
+    details.querySelectorAll('[data-download]').forEach(a=>a.addEventListener('click',trackDownload));
+  }catch(e){headline.textContent='Payment not verified.';intro.textContent='Files remain locked until Stripe confirms a successful payment.';statusEl.className='status bad';statusEl.textContent=e.message||'Unable to verify this order.';details.innerHTML='<p class="muted">If you completed payment, use the order-support contact form and include the Stripe receipt or Checkout reference.</p><a class="button ghost" href="index.html#contact">Order support</a>'}
+}
+verify();
+</script>
+</body>
+</html>
